@@ -3745,7 +3745,4 @@ custom_picker_2.frame.Visible = false
 custom_picker_3.frame.Visible = false
 end
 
-end
-
-
 return library
