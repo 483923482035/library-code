@@ -47,6 +47,34 @@ do
 		end
 		getgenv().__ui_library = nil
 	end
+
+	local prev_priv = getgenv().__priv9
+	if prev_priv then
+		prev_priv.running = false
+		for _, connection in next, (prev_priv.connections or {}) do
+			pcall(function() connection:Disconnect() end)
+		end
+		for _, instance in next, (prev_priv.instances or {}) do
+			pcall(function() instance:Destroy() end)
+		end
+		getgenv().__priv9 = nil
+	end
+
+	local old_lib = getgenv().library
+	if old_lib then
+		if old_lib.watermark_connection then
+			pcall(function() old_lib.watermark_connection:Disconnect() end)
+		end
+		if old_lib.watermark_outline then
+			pcall(function() old_lib.watermark_outline:Destroy() end)
+		end
+		if old_lib.gui then
+			pcall(function() old_lib.gui:Destroy() end)
+		end
+		if old_lib.sgui then
+			pcall(function() old_lib.sgui:Destroy() end)
+		end
+	end
 end
 
 local __ui_library = { connections = {}, instances = {}, running = true }
@@ -82,12 +110,13 @@ local function mouse_in_frame(uiobject)
 	return (x_cond and y_cond)
 end
 
-getgenv().library = {
+local library = {
 directory = "library_configs",
 folders = {
 "/fonts",
 "/configs",
 },
+
 flags = {},
 config_flags = {},
 
@@ -100,6 +129,8 @@ player = {},
 colorpicker_open = false;
 gui;
 }
+getgenv().library = library
+
 
 local themes = {
 preset = {
@@ -221,75 +252,103 @@ local flags = library.flags
 local config_flags = library.config_flags
 library.keybinds = {}
 
+local function safe_font(asset, weight, style)
+	if typeof and typeof(asset) == "Font" then
+		return asset
+	end
+	if type(asset) == "table" and (asset.Asset ~= nil or asset.Family ~= nil) then
+		return asset
+	end
+	if asset then
+		local ok, f = pcall(function()
+			return Font.new(asset, weight or Enum.FontWeight.Regular, style or Enum.FontStyle.Normal)
+		end)
+		if ok and f then return f end
+	end
+	if Font and Font.fromEnum then
+		local ok, f = pcall(function()
+			return Font.fromEnum(Enum.Font.SourceSans)
+		end)
+		if ok and f then return f end
+	end
+	return asset or { Asset = asset, Weight = weight, Style = style }
+end
+
 local fonts = {}; do
 function Register_Font(Name, Weight, Style, Asset)
-	if isfile(Asset.Id) then
-		delfile(Asset.Id)
-	end
-	writefile(Asset.Id, Asset.Font)
+	local custom_font = nil
+	pcall(function()
+		if isfile and delfile and writefile and getcustomasset then
+			if isfile(Asset.Id) then
+				delfile(Asset.Id)
+			end
+			writefile(Asset.Id, Asset.Font)
 
-	if isfile(Name .. ".font") then
-		delfile(Name .. ".font")
-	end
+			if isfile(Name .. ".font") then
+				delfile(Name .. ".font")
+			end
 
-	local Data = {
-	name = Name,
-	faces = {
-	{
-	name = "Regular",
-	weight = Weight,
-	style = Style,
-	assetId = getcustomasset(Asset.Id),
-	},
-	},
-	}
+			local Data = {
+				name = Name,
+				faces = {
+					{
+						name = "Regular",
+						weight = Weight,
+						style = Style,
+						assetId = getcustomasset(Asset.Id),
+					},
+				},
+			}
 
-	writefile(Name .. ".font", game:GetService("HttpService"):JSONEncode(Data))
-
-	return getcustomasset(Name .. ".font");
+			writefile(Name .. ".font", game:GetService("HttpService"):JSONEncode(Data))
+			custom_font = getcustomasset(Name .. ".font")
+		end
+	end)
+	return custom_font
 end
 
 local ProggyTiny = Register_Font("Tahoma", 200, "Normal", {
 Id = "Tahoma.ttf",
-Font = game:HttpGet("https://github.com/483923482035/library-code/raw/refs/heads/main/fonts/tahomabold.ttf"),
+Font = game:HttpGet("https://raw.githubusercontent.com/483923482035/library-code/main/fonts/tahomabold.ttf"),
 })
 
 local Tahoma11Bold = Register_Font("Tahoma11PixelBold", 700, "Normal", {
 Id = "Tahoma11PixelBold.ttf",
-Font = game:HttpGet("https://github.com/483923482035/library-code/raw/refs/heads/main/fonts/Tahoma11PixelBold.ttf")
+Font = game:HttpGet("https://raw.githubusercontent.com/483923482035/library-code/main/fonts/Tahoma11PixelBold.ttf")
 })
 
 local Tahoma11 = Register_Font("Tahoma11Pixel", 400, "normal", {
 Id = "Tahoma11Pixel.ttf",
-Font = game:HttpGet("https://github.com/483923482035/library-code/raw/refs/heads/main/fonts/Tahoma11Pixel.ttf")
+Font = game:HttpGet("https://raw.githubusercontent.com/483923482035/library-code/main/fonts/Tahoma11Pixel.ttf")
 })
 
 -- NOTE: Tahoma 12 Pixel is designed to use TextSize = 13
 local Tahoma12 = Register_Font("Tahoma12Pixel", 400, "normal", {
 Id = "Tahoma12Pixel.ttf",
-Font = game:HttpGet("https://github.com/483923482035/library-code/raw/refs/heads/main/fonts/Tahoma12Pixel.ttf")
+Font = game:HttpGet("https://raw.githubusercontent.com/483923482035/library-code/main/fonts/Tahoma12Pixel.ttf")
 })
 
 local Tahoma12Bold = Register_Font("Tahoma12PixelBold", 700, "Normal", {
 Id = "Tahoma12PixelBold.ttf",
-Font = game:HttpGet("https://github.com/483923482035/library-code/raw/refs/heads/main/fonts/Tahoma12PixelBold.ttf")
+Font = game:HttpGet("https://raw.githubusercontent.com/483923482035/library-code/main/fonts/Tahoma12PixelBold.ttf")
 })
 
 local SmallestPixel = Register_Font("SmallestPixel", 400, "Normal", {
 Id = "SmallestPixel.ttf",
-Font = game:HttpGet("https://github.com/483923482035/library-code/raw/refs/heads/main/fonts/smallest_pixel-7.ttf"),
+Font = game:HttpGet("https://raw.githubusercontent.com/483923482035/library-code/main/fonts/smallest_pixel-7.ttf"),
 })
 
 fonts = {
-["TahomaBold"] = Font.new(ProggyTiny, Enum.FontWeight.Regular, Enum.FontStyle.Normal);
-["Tahoma11Pixel"] = Font.new(Tahoma11, Enum.FontWeight.Regular, Enum.FontStyle.Normal);
-["Tahoma11PixelBold"] = Font.new(Tahoma11Bold, Enum.FontWeight.Regular, Enum.FontStyle.Normal);
-["Tahoma12Pixel"] = Font.new(Tahoma12, Enum.FontWeight.Regular, Enum.FontStyle.Normal);
-["Tahoma12PixelBold"] = Font.new(Tahoma12Bold, Enum.FontWeight.Regular, Enum.FontStyle.Normal);
-["ProggyClean"] = Font.new(Tahoma12, Enum.FontWeight.Regular, Enum.FontStyle.Normal);
-["SmallestPixel"] = Font.new(SmallestPixel, Enum.FontWeight.Regular, Enum.FontStyle.Normal);
+["TahomaBold"] = safe_font(ProggyTiny, Enum.FontWeight.Regular, Enum.FontStyle.Normal);
+["Tahoma11Pixel"] = safe_font(Tahoma11, Enum.FontWeight.Regular, Enum.FontStyle.Normal);
+["Tahoma11PixelBold"] = safe_font(Tahoma11Bold, Enum.FontWeight.Regular, Enum.FontStyle.Normal);
+["Tahoma12Pixel"] = safe_font(Tahoma12, Enum.FontWeight.Regular, Enum.FontStyle.Normal);
+["Tahoma12PixelBold"] = safe_font(Tahoma12Bold, Enum.FontWeight.Regular, Enum.FontStyle.Normal);
+["ProggyClean"] = safe_font(Tahoma12, Enum.FontWeight.Regular, Enum.FontStyle.Normal);
+["SmallestPixel"] = safe_font(SmallestPixel, Enum.FontWeight.Regular, Enum.FontStyle.Normal);
 }
 end
+
 
 function library:tween(obj, properties)
 	local tween = tween_service:Create(obj, TweenInfo.new(0.25, Enum.EasingStyle.Quad, Enum.EasingDirection.InOut, 0, false, 0), properties):Play()
@@ -462,13 +521,20 @@ function library:update_config_list()
 
 	local list = {}
 
-	for idx, file in listfiles(library.directory .. "/configs") do
-		local name = file:gsub(library.directory .. "/configs\\", ""):gsub(".cfg", ""):gsub(library.directory .. "\\configs\\", "")
-		list[#list + 1] = name
+	if type(listfiles) == "function" then
+		pcall(function()
+			for idx, file in next, (listfiles(library.directory .. "/configs") or {}) do
+				local name = file:gsub(library.directory .. "/configs[/\\]", ""):gsub("%.cfg$", ""):gsub(library.directory .. "[/\\]configs[/\\]", "")
+				list[#list + 1] = name
+			end
+		end)
 	end
 
-	config_holder.refresh_options(list)
+	if config_holder and config_holder.refresh_options then
+		config_holder.refresh_options(list)
+	end
 end
+
 
 function library:get_config()
 	local Config = {}
@@ -1116,20 +1182,40 @@ function library:update_keybind_visualizer()
 end
 
 function library:unload_menu()
-	if library.gui then
-		library.gui:Destroy()
+	if library.watermark_connection then
+		pcall(function() library.watermark_connection:Disconnect() end)
+		library.watermark_connection = nil
 	end
 
-	for index, connection in next, library.connections do
-		connection:Disconnect()
-		connection = nil
+	if library.watermark_outline then
+		pcall(function() library.watermark_outline:Destroy() end)
+		library.watermark_outline = nil
+		library.watermark_gradient = nil
+	end
+
+	if library.gui then
+		pcall(function() library.gui:Destroy() end)
 	end
 
 	if library.sgui then
-		library.sgui:Destroy()
+		pcall(function() library.sgui:Destroy() end)
 	end
 
-	library = nil
+	for index, connection in next, (library.connections or {}) do
+		pcall(function() connection:Disconnect() end)
+	end
+
+	local ui_lib = getgenv().__ui_library
+	if ui_lib then
+		ui_lib.running = false
+		for _, connection in next, (ui_lib.connections or {}) do
+			pcall(function() connection:Disconnect() end)
+		end
+		for _, instance in next, (ui_lib.instances or {}) do
+			pcall(function() instance:Destroy() end)
+		end
+		getgenv().__ui_library = nil
+	end
 end
 
 function library:window(properties)
@@ -1495,9 +1581,16 @@ function notifications:fade(path, is_fading)
 end
 
 function notifications:create_notification(options)
+	local text_str = "Notification"
+	if type(options) == "string" then
+		text_str = options
+	elseif type(options) == "table" then
+		text_str = options.name or options.text or options.title or options.message or "Notification"
+	end
+
 	local cfg = {
-	name = options.name or "Hit: retard (retard) in the Head for 100 Damage!",
-	outline;
+		name = text_str,
+		outline = nil,
 	}
 
 	local wm = library.watermark_outline
@@ -1508,57 +1601,57 @@ function notifications:create_notification(options)
 	local wmHeight = (wm and wm.AbsoluteSize and wm.AbsoluteSize.Y) and wm.AbsoluteSize.Y or 24
 
 	local outline = library:create("Frame", {
-	Parent = library.sgui;
-	Position = dim_offset(baseX, baseY + wmHeight + ((#notifications.notifs + 1) * gap));
-	BorderColor3 = rgb(0, 0, 0);
-	Size = dim2(0, 0, 0, 24);
-	BorderSizePixel = 0;
-	AutomaticSize = Enum.AutomaticSize.X;
-	BackgroundColor3 = rgb(255, 255, 255)
-	});
+		Parent = library.sgui;
+		Position = dim_offset(baseX, baseY + wmHeight + ((#notifications.notifs + 1) * gap));
+		BorderColor3 = rgb(0, 0, 0);
+		Size = dim2(0, 0, 0, 24);
+		BorderSizePixel = 0;
+		AutomaticSize = Enum.AutomaticSize.X;
+		BackgroundColor3 = rgb(255, 255, 255);
+	})
 
 	local dark = library:create("Frame", {
-	Parent = outline;
-	BackgroundTransparency = 1;
-	Position = dim2(0, 2, 0, 2);
-	BorderColor3 = rgb(0, 0, 0);
-	Size = dim2(1, -4, 1, -4);
-	BorderSizePixel = 0;
-	BackgroundColor3 = rgb(0, 0, 0)
-	});
+		Parent = outline;
+		BackgroundTransparency = 1;
+		Position = dim2(0, 2, 0, 2);
+		BorderColor3 = rgb(0, 0, 0);
+		Size = dim2(1, -4, 1, -4);
+		BorderSizePixel = 0;
+		BackgroundColor3 = rgb(0, 0, 0);
+	})
 
 	library:create("UIPadding", {
-	PaddingTop = dim(0, 7);
-	PaddingBottom = dim(0, 6);
-	Parent = dark;
-	PaddingRight = dim(0, 7);
-	PaddingLeft = dim(0, 4)
-	});
+		PaddingTop = dim(0, 7);
+		PaddingBottom = dim(0, 6);
+		Parent = dark;
+		PaddingRight = dim(0, 7);
+		PaddingLeft = dim(0, 4);
+	})
 
 	library:create("TextLabel", {
-	FontFace = fonts["Tahoma12Pixel"];
-	TextColor3 = rgb(255, 255, 255);
-	BorderColor3 = rgb(0, 0, 0);
-	Text = cfg.name;
-	Parent = dark;
-	Size = dim2(0, 0, 1, 0);
-	Position = dim2(0, 1, 0, -1);
-	BackgroundTransparency = 1;
-	TextXAlignment = Enum.TextXAlignment.Left;
-	BorderSizePixel = 0;
-	AutomaticSize = Enum.AutomaticSize.X;
-	TextSize = 13;
-	BackgroundColor3 = rgb(255, 255, 255)
-	});
+		FontFace = safe_font(fonts["Tahoma12Pixel"]);
+		TextColor3 = rgb(255, 255, 255);
+		BorderColor3 = rgb(0, 0, 0);
+		Text = cfg.name;
+		Parent = dark;
+		Size = dim2(0, 0, 1, 0);
+		Position = dim2(0, 1, 0, -1);
+		BackgroundTransparency = 1;
+		TextXAlignment = Enum.TextXAlignment.Left;
+		BorderSizePixel = 0;
+		AutomaticSize = Enum.AutomaticSize.X;
+		TextSize = 13;
+		BackgroundColor3 = rgb(255, 255, 255);
+	})
 
 	library:create("UIGradient", {
-	Color = rgbseq{
-	rgbkey(0, themes.preset["1"]),
-	rgbkey(0.5, themes.preset["2"]),
-	rgbkey(1, themes.preset["3"]),
-	};
-	Parent = outline
-	});
+		Color = rgbseq{
+			rgbkey(0, themes.preset["1"]),
+			rgbkey(0.5, themes.preset["2"]),
+			rgbkey(1, themes.preset["3"]),
+		};
+		Parent = outline;
+	})
 
 	local index = #notifications.notifs + 1
 	notifications.notifs[index] = outline
@@ -1569,66 +1662,93 @@ function notifications:create_notification(options)
 	notifications:fade(outline, false)
 
 	task.spawn(function()
-	task.wait(3)
+		task.wait(3)
 
-	notifications.notifs[index] = nil
+		notifications.notifs[index] = nil
 
-	notifications:fade(outline, true)
+		notifications:fade(outline, true)
 
-	task.wait(3)
+		task.wait(3)
 
-	outline:Destroy()
-end)
+		outline:Destroy()
+	end)
+end
+
+library.notifications = notifications
+getgenv().notifications = notifications
+
+function library:create_notification(options)
+	return notifications:create_notification(options)
+end
+
+function library:notification(options)
+	return notifications:create_notification(options)
 end
 
 function library:watermark(options)
+	options = options or {}
 	local cfg = {
-	name = options.name or "nebulahax";
+		name = options.name or "library",
 	}
 
-	local outline = library:create("Frame", {
-	Parent = library.sgui;
-	Position = dim2(0, 18, 0, 0);
-	BorderColor3 = rgb(0, 0, 0);
-	Size = dim2(0, 0, 0, 24);
-	BorderSizePixel = 0;
-	BackgroundColor3 = rgb(255, 255, 255)
-	}); library.watermark_outline = outline; library:draggify(outline);
+	if library.watermark_connection then
+		pcall(function() library.watermark_connection:Disconnect() end)
+		library.watermark_connection = nil
+	end
+
+	if library.watermark_outline then
+		pcall(function() library.watermark_outline:Destroy() end)
+		library.watermark_outline = nil
+		library.watermark_gradient = nil
+	end
+
+	local outline = track_instance(library:create("Frame", {
+		Parent = library.sgui;
+		Position = options.position or dim2(0, 18, 0, 0);
+		BorderColor3 = rgb(0, 0, 0);
+		Size = dim2(0, 0, 0, 24);
+		BorderSizePixel = 0;
+		BackgroundColor3 = rgb(255, 255, 255);
+		Visible = options.visible ~= false;
+	}))
+	library.watermark_outline = outline
+	library:draggify(outline)
 
 	local dark = library:create("Frame", {
-	Parent = outline;
-	BackgroundTransparency = 0.6;
-	Position = dim2(0, 2, 0, 2);
-	BorderColor3 = rgb(0, 0, 0);
-	Size = dim2(1, -4, 1, -4);
-	BorderSizePixel = 0;
-	BackgroundColor3 = rgb(0, 0, 0)
-	});
+		Parent = outline;
+		BackgroundTransparency = 0.6;
+		Position = dim2(0, 2, 0, 2);
+		BorderColor3 = rgb(0, 0, 0);
+		Size = dim2(1, -4, 1, -4);
+		BorderSizePixel = 0;
+		BackgroundColor3 = rgb(0, 0, 0);
+	})
 
+	local font = safe_font(options.font or options.FontFace or fonts["Tahoma12Pixel"])
 	local text_title = library:create("TextLabel", {
-	FontFace = fonts["Tahoma12Pixel"];
-	TextColor3 = rgb(255, 255, 255);
-	BorderColor3 = rgb(0, 0, 0);
-	Text = cfg.name;
-	Parent = dark;
-	Size = dim2(1, 0, 1, 0);
-	Position = dim2(0, 0, 0, -2);
-	BackgroundTransparency = 1;
-	TextXAlignment = Enum.TextXAlignment.Center;
-	TextYAlignment = Enum.TextYAlignment.Center;
-	BorderSizePixel = 0;
-	TextSize = 13;
-	BackgroundColor3 = rgb(255, 255, 255)
-	});
+		FontFace = font;
+		TextColor3 = options.text_color or rgb(255, 255, 255);
+		BorderColor3 = rgb(0, 0, 0);
+		Text = cfg.name;
+		Parent = dark;
+		Size = dim2(1, 0, 1, 0);
+		Position = dim2(0, 0, 0, -2);
+		BackgroundTransparency = 1;
+		TextXAlignment = Enum.TextXAlignment.Center;
+		TextYAlignment = Enum.TextYAlignment.Center;
+		BorderSizePixel = 0;
+		TextSize = options.text_size or 13;
+		BackgroundColor3 = rgb(255, 255, 255);
+	})
 
 	library.watermark_gradient = library:create("UIGradient", {
-	Color = rgbseq{
-	rgbkey(0, themes.preset["1"]),
-	rgbkey(0.5, themes.preset["2"]),
-	rgbkey(1, themes.preset["3"]),
-	};
-	Parent = outline
-	});
+		Color = rgbseq{
+			rgbkey(0, themes.preset["1"]),
+			rgbkey(0.5, themes.preset["2"]),
+			rgbkey(1, themes.preset["3"]),
+		};
+		Parent = outline;
+	})
 
 	local char_w = 6.2
 
@@ -1647,29 +1767,54 @@ function library:watermark(options)
 	end)
 
 	function cfg.update_text(text)
+		cfg.name = text
 		text_title.Text = text
 		apply_size(text)
 	end
 
+	function cfg.set_visible(bool)
+		outline.Visible = bool
+	end
+
+	function cfg.destroy()
+		if library.watermark_connection then
+			pcall(function() library.watermark_connection:Disconnect() end)
+			library.watermark_connection = nil
+		end
+		if library.watermark_outline == outline then
+			library.watermark_outline = nil
+			library.watermark_gradient = nil
+		end
+		outline:Destroy()
+	end
+
+	cfg.outline = outline
+	cfg.label = text_title
+	cfg.gradient = library.watermark_gradient
+
 	cfg.update_text(cfg.name)
 
+	if options.auto_update then
+		local base_name = options.name or "priv9"
+		local fps = 0
+		local watermark_delay = tick()
+		library.watermark_connection = track(run.RenderStepped:Connect(function()
+			fps += 1
+			if tick() - watermark_delay >= 1 then
+				watermark_delay = tick()
+				local ping = "0ms"
+				pcall(function()
+					ping = math.floor(stats.PerformanceStats.Ping:GetValue()) .. "ms"
+				end)
+				cfg.update_text(string.format("%s | fps: %s | %s", base_name, fps, ping))
+				fps = 0
+			end
+		end))
+	end
+
+	library.watermark_object = cfg
 	return setmetatable(cfg, library)
 end
-
-local watermark = library:watermark({name = "priv9.net alpha"})
-local fps = 0
-local watermark_delay = tick()
-
-track(run.RenderStepped:Connect(function()
-fps += 1
-
-if tick() - watermark_delay > 1 then
-	watermark_delay = tick()
-	local ping = math.floor(stats.PerformanceStats.Ping:GetValue()) .. "ms"
-	watermark.update_text(string.format("priv9.net alpha | fps: %s", fps, ping))
-	fps = 0
-end
-end))
 
 function library:column(properties)
 	self.count += 1
@@ -2094,9 +2239,9 @@ function library:list(options)
 			cfg.current_instance = button
 			button.TextColor3 = rgb(255, 255, 255)
 
-			flags[cfg.flag] = button.text
+			flags[cfg.flag] = button.Text
 
-			cfg.callback(button.text)
+			cfg.callback(button.Text)
 		end)
 	end
 end
@@ -2111,35 +2256,12 @@ function cfg.filter_options(text)
 	end
 end
 
-local function update_label()
-if cfg.open then
-
-	local highlighted = nil
-	for _, opt in next, cfg.option_instances do
-		if opt.TextColor3 == rgb(255, 255, 255) then
-			highlighted = opt.Text
-			break
-		end
-	end
-
-	if highlighted then
-		text.Text = highlighted
-	else
-		local fallback = flags[cfg.flag] or (cfg.option_instances[1] and cfg.option_instances[1].Text) or "..."
-		text.Text = fallback
-	end
-
-	return
+function cfg.get()
+	return flags[cfg.flag]
 end
 
-local display = ""
-if cfg.multi then
-	display = concat(cfg.multi_items, ", ")
-else
-	display = flags[cfg.flag] or cfg.default or ""
-end
-
-text.Text = display
+function cfg.set_visible(state)
+	accent.Visible = state
 end
 
 function cfg.set(value)
@@ -2374,7 +2496,7 @@ function library:dropdown(options)
 	local cfg = {
 	name = options.name or nil,
 	flag = options.flag or options.name or "Flag",
-	items = options.items or {""},
+	items = options.items or options.options or options.values or {""},
 	callback = options.callback or function() end,
 	multi = options.multi or false,
 	scrolling = options.scrolling or false,
@@ -3620,8 +3742,12 @@ section:button({name = "Delete", callback = function() delfile(library.directory
 local section = config_column:section({name = "theme", size = 1, default = true})
 
 local refresh_theme_gradient = function()
-library.gradient.Color = rgbseq{rgbkey(0, themes.preset["1"]), rgbkey(0.5, themes.preset["2"]), rgbkey(1, themes.preset["3"])}
-library.watermark_gradient.Color = rgbseq{rgbkey(0, themes.preset["1"]), rgbkey(0.5, themes.preset["2"]), rgbkey(1, themes.preset["3"])}
+if library.gradient then
+	library.gradient.Color = rgbseq{rgbkey(0, themes.preset["1"]), rgbkey(0.5, themes.preset["2"]), rgbkey(1, themes.preset["3"])}
+end
+if library.watermark_gradient then
+	library.watermark_gradient.Color = rgbseq{rgbkey(0, themes.preset["1"]), rgbkey(0.5, themes.preset["2"]), rgbkey(1, themes.preset["3"])}
+end
 end
 
 local custom_picker_1, custom_picker_2, custom_picker_3
@@ -3653,17 +3779,21 @@ if value == "ancient" then
 	library:update_theme("2", a2)
 	library:update_theme("3", a3)
 
-	library.gradient.Color = rgbseq{
-	rgbkey(0, a1),
-	rgbkey(0.5, a2),
-	rgbkey(1, a3),
-	};
+	if library.gradient then
+		library.gradient.Color = rgbseq{
+		rgbkey(0, a1),
+		rgbkey(0.5, a2),
+		rgbkey(1, a3),
+		};
+	end
 
-	library.watermark_gradient.Color = rgbseq{
-	rgbkey(0, a1),
-	rgbkey(0.5, a2),
-	rgbkey(1, a3),
-	};
+	if library.watermark_gradient then
+		library.watermark_gradient.Color = rgbseq{
+		rgbkey(0, a1),
+		rgbkey(0.5, a2),
+		rgbkey(1, a3),
+		};
+	end
 elseif value == "new" then
 	local n1 = hex("#360820")
 	local n2 = hex("#360820")
@@ -3673,17 +3803,21 @@ elseif value == "new" then
 	library:update_theme("2", n2)
 	library:update_theme("3", n3)
 
-	library.gradient.Color = rgbseq{
-	rgbkey(0, n1),
-	rgbkey(0.5, n2),
-	rgbkey(1, n3),
-	};
+	if library.gradient then
+		library.gradient.Color = rgbseq{
+		rgbkey(0, n1),
+		rgbkey(0.5, n2),
+		rgbkey(1, n3),
+		};
+	end
 
-	library.watermark_gradient.Color = rgbseq{
-	rgbkey(0, n1),
-	rgbkey(0.5, n2),
-	rgbkey(1, n3),
-	};
+	if library.watermark_gradient then
+		library.watermark_gradient.Color = rgbseq{
+		rgbkey(0, n1),
+		rgbkey(0.5, n2),
+		rgbkey(1, n3),
+		};
+	end
 elseif value == "dark" then
 	local g = hex("#1D1D1D")
 
@@ -3691,17 +3825,21 @@ elseif value == "dark" then
 	library:update_theme("2", g)
 	library:update_theme("3", g)
 
-	library.gradient.Color = rgbseq{
-	rgbkey(0, g),
-	rgbkey(0.5, g),
-	rgbkey(1, g),
-	};
+	if library.gradient then
+		library.gradient.Color = rgbseq{
+		rgbkey(0, g),
+		rgbkey(0.5, g),
+		rgbkey(1, g),
+		};
+	end
 
-	library.watermark_gradient.Color = rgbseq{
-	rgbkey(0, g),
-	rgbkey(0.5, g),
-	rgbkey(1, g),
-	};
+	if library.watermark_gradient then
+		library.watermark_gradient.Color = rgbseq{
+		rgbkey(0, g),
+		rgbkey(0.5, g),
+		rgbkey(1, g),
+		};
+	end
 else
 	local m1 = hex("#245771")
 	local m2 = hex("#215D63")
@@ -3711,17 +3849,21 @@ else
 	library:update_theme("2", m2)
 	library:update_theme("3", m3)
 
-	library.gradient.Color = rgbseq{
-	rgbkey(0, m1),
-	rgbkey(0.5, m2),
-	rgbkey(1, m3),
-	};
+	if library.gradient then
+		library.gradient.Color = rgbseq{
+		rgbkey(0, m1),
+		rgbkey(0.5, m2),
+		rgbkey(1, m3),
+		};
+	end
 
-	library.watermark_gradient.Color = rgbseq{
-	rgbkey(0, m1),
-	rgbkey(0.5, m2),
-	rgbkey(1, m3),
-	};
+	if library.watermark_gradient then
+		library.watermark_gradient.Color = rgbseq{
+		rgbkey(0, m1),
+		rgbkey(0.5, m2),
+		rgbkey(1, m3),
+		};
+	end
 end
 end,
 default = "morytania"
